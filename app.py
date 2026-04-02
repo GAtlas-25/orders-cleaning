@@ -101,11 +101,6 @@ def process_order_export(files, ltl_qty_df):
         df_LTL_final['Order Quantity'] / df_LTL_final['Case_Pallet']
     )
 
-    # Pallet quantity for parcel
-    df_parcel_final['Pallet_qty'] = np.ceil(
-        df_parcel_final['Order Quantity'] / df_parcel_final['Case_Pallet']
-    )
-
     return df_LTL_final, df_parcel_final
 
 

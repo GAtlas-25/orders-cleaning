@@ -63,10 +63,15 @@ def process_order_export(files, ltl_qty_df):
     df_LTL_clean = df_LTL[columns].copy()
     df_LTL_clean['DN'] = ""
 
+    # if orig null new columns status with found yes or no
+    df_LTL_clean['Status'] = np.where(df_LTL_clean['Orig'].isna(), 'Not found', 'Found')
+    # if orig is na change it with Not found - so don't disappear from the pivot table
+    df_LTL_clean['Orig'] = df_LTL_clean['Orig'].fillna('Not found')
+
     # Grouping logic - for TN group by unique POs (group lines)
     df_LTL_grouped = (
         df_LTL_clean
-        .groupby(['Purchase order no.', 'Orig'], as_index=False)
+        .groupby(['Purchase order no.', 'Status, 'Orig'], as_index=False)
         .agg({
             'Order Quantity': 'sum',
             'Gross weight': 'sum',

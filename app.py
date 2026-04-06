@@ -97,11 +97,11 @@ def process_order_export(files, ltl_qty_df):
     # Filter LTL orders
     df_LTL_final = df_LTL_grouped[
         (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
-        (df_LTL_grouped['LTL Qty'].isna() == True)
+        ((df_LTL_grouped['LTL Qty'].isna() == True) & (df_LTL_grouped['Status'] == 'Found')) # these are the 24x48s that always ship LTL
     ]
     df_parcel_final = df_LTL_grouped[
         (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) &
-        (df_LTL_grouped['LTL Qty'].isna() == False)
+        (df_LTL_grouped['LTL Qty'].isna() == False) | (df_LTL_grouped['Material'].astype(str).str.startswith('5')) # samples always go in parcel
     ]
 
     # Drop LTL Qty columns

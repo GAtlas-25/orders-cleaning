@@ -34,7 +34,7 @@ def process_order_export(files, ltl_qty_df):
         ltl_qty_df[['SAP Code', 'LTL Qty', 'Case_Pallet','Orig']],
         left_on='Material',
         right_on='SAP Code',
-        how='inner'
+        how='left'
     )
 
     df_LTL = df_orders.copy()

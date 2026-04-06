@@ -6,7 +6,7 @@ import io
 # -----------------------------------------------------------
 # Load LTL Qty file (pre-loaded in your system)
 # -----------------------------------------------------------
-LTL_QTY_PATH = "LTL_qty.xlsx"
+LTL_QTY_PATH = "LTL_qty_updated.xlsx"
 
 @st.cache_data
 def load_ltl_qty():

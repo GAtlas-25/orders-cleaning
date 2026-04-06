@@ -71,7 +71,7 @@ def process_order_export(files, ltl_qty_df):
     # Grouping logic - for TN group by unique POs (group lines)
     df_LTL_grouped = (
         df_LTL_clean
-        .groupby(['Purchase order no.', 'Status, 'Orig'], as_index=False)
+        .groupby(['Purchase order no.', 'Status', 'Orig'], as_index=False)
         .agg({
             'Order Quantity': 'sum',
             'Gross weight': 'sum',
@@ -80,7 +80,14 @@ def process_order_export(files, ltl_qty_df):
             **{
                 col: 'first'
                 for col in df_LTL_clean.columns
-                if col not in ['Purchase order no.', 'Order Quantity', 'Gross weight', 'Case_Pallet', 'LTL Qty', 'Orig']
+                if col not in [
+                    'Purchase order no.',
+                    'Order Quantity',
+                    'Gross weight',
+                    'Case_Pallet',
+                    'LTL Qty',
+                    'Orig'
+                ]
             }
         })
     )

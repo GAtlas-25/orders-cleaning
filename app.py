@@ -107,6 +107,7 @@ def process_order_export(files, ltl_qty_df):
     # Drop LTL Qty columns
     df_LTL_final = df_LTL_final.drop(columns=['LTL Qty'])
     df_parcel_final = df_parcel_final.drop(columns=['LTL Qty'])
+    df_parcel_final = df_parcel_final.drop(columns=['Case_Pallet'])
 
     # Pallet quantity for LTL
     df_LTL_final['Pallet_qty'] = np.ceil(

@@ -200,6 +200,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         engine='python',
         dtype={'ShipToPostalCode': str}
     )
+    df_chub.columns = df_chub.columns.str.strip().str.replace(r"\s+", "", regex=True)
     
     # Ensure ZIP is string, strip, and pad with leading zeros
     df_chub['ShipToPostalCode'] = (
@@ -209,8 +210,6 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         .str.replace(r'\.0$', '', regex=True)  # removes Excel float artifact like 12345.0
         .str.zfill(5)
     )
-
-    df_chub.columns = df_chub.columns.str.strip().str.replace(r"\s+", "", regex=True)
 
     required_chub_cols = [
         'PONumber', 'ShipToName', 'ShipToAddress1', 'ShipToAddress2',

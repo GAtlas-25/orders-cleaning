@@ -63,10 +63,21 @@ def process_order_export(files, ltl_qty_df):
     ]
 
     df_LTL_clean = df_LTL[columns].copy()
-    df_LTL_clean['DN'] = ""
 
     df_LTL_clean['Status'] = np.where(df_LTL_clean['Orig'].isna(), 'Not found', 'Found')
     df_LTL_clean['Orig'] = df_LTL_clean['Orig'].fillna('Not found')
+    
+    # If Material is sample (starts with 5), Orig is blank and Status is Found - Sample
+    df_LTL_clean['Status'] = np.where(
+        df_LTL_clean['Material'].astype(str).str.startswith('5'),
+        'Found - Sample',
+        df_LTL_clean['Status']
+    )
+    df_LTL_clean['Orig'] = np.where(
+        df_LTL_clean['Status'] == 'Found - Sample',
+        '',
+        df_LTL_clean['Orig']
+    )
 
     df_LTL_grouped = (
         df_LTL_clean
@@ -91,9 +102,7 @@ def process_order_export(files, ltl_qty_df):
         })
     )
 
-    df_LTL_grouped = df_LTL_grouped.sort_values(
-        ['Purchase order no.', 'Orig']
-    ).reset_index(drop=True)
+    df_LTL_grouped = df_LTL_grouped.sort_values(['Purchase order no.', 'Orig']).reset_index(drop=True)
 
     df_LTL_final = df_LTL_grouped[
         (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
@@ -190,6 +199,15 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         encoding='utf-8',
         engine='python',
         dtype={'ShipToPostalCode': str}
+    )
+    
+    # Ensure ZIP is string, strip, and pad with leading zeros
+    df_chub['ShipToPostalCode'] = (
+        df_chub['ShipToPostalCode']
+        .astype(str)
+        .str.strip()
+        .str.replace(r'\.0$', '', regex=True)  # removes Excel float artifact like 12345.0
+        .str.zfill(5)
     )
 
     df_chub.columns = df_chub.columns.str.strip().str.replace(r"\s+", "", regex=True)

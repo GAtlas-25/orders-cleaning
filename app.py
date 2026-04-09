@@ -51,6 +51,9 @@ def process_order_export(files, ltl_qty_df):
     # Convert weight to pounds
     df_LTL['Gross weight'] = df_LTL['Gross weight'] * 2.20462
 
+    # Column to count lines per PO
+    df_LTL['Lines_PO'] = 1
+
     columns = [
         'Purchase order no.',
         'Sales document',
@@ -59,14 +62,17 @@ def process_order_export(files, ltl_qty_df):
         'Gross weight',
         'Case_Pallet',
         'LTL Qty',
-        'Orig'
+        'Orig',
+        'Batch',
+        'Storage Location',
+        'Lines_PO'
     ]
 
     df_LTL_clean = df_LTL[columns].copy()
 
     df_LTL_clean['Status'] = np.where(df_LTL_clean['Orig'].isna(), 'Not found', 'Found')
     df_LTL_clean['Orig'] = df_LTL_clean['Orig'].fillna('Not found')
-    
+
     # If Material is sample (starts with 5), Orig is blank and Status is Found - Sample
     df_LTL_clean['Status'] = np.where(
         df_LTL_clean['Material'].astype(str).str.startswith('5'),
@@ -79,6 +85,33 @@ def process_order_export(files, ltl_qty_df):
         df_LTL_clean['Orig']
     )
 
+    # Clean key columns before flags
+    df_LTL_clean['Batch'] = df_LTL_clean['Batch'].astype(str).str.strip()
+
+    # Normalize PO and Batch empties for flags
+    df_LTL_clean['Purchase order no.'] = df_LTL_clean['Purchase order no.'].replace(
+        ['', ' ', 'NaN', 'nan', 'None'],
+        pd.NA
+    )
+    df_LTL_clean['Batch'] = df_LTL_clean['Batch'].replace(
+        ['', ' ', 'NaN', 'nan', 'None'],
+        pd.NA
+    )
+
+    # Create flags for conditions
+    df_LTL_clean['Missing_PO'] = (
+        df_LTL_clean['Purchase order no.'].isna() |
+        (df_LTL_clean['Purchase order no.'].astype(str).str.strip() == '')
+    )
+
+    df_LTL_clean['Missing_Batch'] = (
+        df_LTL_clean['Batch'].isna() |
+        (df_LTL_clean['Batch'].astype(str).str.strip() == '')
+    )
+
+    df_LTL_clean['Storage_2509'] = df_LTL_clean['Storage Location'] == 2509
+
+    # Grouping logic
     df_LTL_grouped = (
         df_LTL_clean
         .groupby(['Purchase order no.', 'Status', 'Orig'], as_index=False)
@@ -87,6 +120,10 @@ def process_order_export(files, ltl_qty_df):
             'Gross weight': 'sum',
             'Case_Pallet': 'min',
             'LTL Qty': 'min',
+            'Lines_PO': 'sum',
+            'Missing_PO': 'max',
+            'Missing_Batch': 'max',
+            'Storage_2509': 'max',
             **{
                 col: 'first'
                 for col in df_LTL_clean.columns
@@ -96,7 +133,11 @@ def process_order_export(files, ltl_qty_df):
                     'Gross weight',
                     'Case_Pallet',
                     'LTL Qty',
-                    'Orig'
+                    'Orig',
+                    'Lines_PO',
+                    'Missing_PO',
+                    'Missing_Batch',
+                    'Storage_2509'
                 ]
             }
         })
@@ -104,27 +145,93 @@ def process_order_export(files, ltl_qty_df):
 
     df_LTL_grouped = df_LTL_grouped.sort_values(['Purchase order no.', 'Orig']).reset_index(drop=True)
 
+    # Normalize grouped columns
+    for col in ['Purchase order no.', 'Batch', 'LTL Qty']:
+        df_LTL_grouped[col] = df_LTL_grouped[col].replace(['', ' ', 'NaN', 'nan', 'None'], pd.NA)
+
+    ##########################################
+    #### Create final output tables
+
+    # LTL FINAL
     df_LTL_final = df_LTL_grouped[
         (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
-        ((df_LTL_grouped['LTL Qty'].isna()) & (df_LTL_grouped['Status'] == 'Found'))
+        (
+            (df_LTL_grouped['LTL Qty'].isna() == True) &
+            (df_LTL_grouped['Status'] == 'Found')
+        )
     ].copy()
 
+    # LTL REVIEW
+    df_LTL_errors = df_LTL_grouped[
+        (
+            (
+                df_LTL_grouped['Missing_PO'] &
+                (
+                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                )
+            )
+            |
+            (
+                df_LTL_grouped['Missing_Batch'] &
+                (
+                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                )
+            )
+            |
+            (
+                df_LTL_grouped['Storage_2509'] &
+                (
+                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                )
+            )
+        )
+    ].copy()
+
+    # PARCEL FINAL
     df_parcel_final = df_LTL_grouped[
         (
             (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) &
-            (df_LTL_grouped['LTL Qty'].notna())
+            (df_LTL_grouped['LTL Qty'].isna() == False)
         ) |
         (df_LTL_grouped['Material'].astype(str).str.startswith('5'))
     ].copy()
 
-    df_LTL_final = df_LTL_final.drop(columns=['LTL Qty'])
-    df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet'])
+    # PARCEL REVIEW
+    df_parcel_errors = df_LTL_grouped[
+        (
+            (
+                df_LTL_grouped['Missing_PO'] &
+                (
+                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
+                )
+            )
+            |
+            (
+                df_LTL_grouped['Missing_Batch'] &
+                (
+                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
+                )
+            )
+        )
+    ].copy()
+
+    # Final cleaning for output
+    df_LTL_final = df_LTL_final.drop(columns=['LTL Qty', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509'])
+    df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509'])
+
+    df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch'])
+    df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch'])
 
     df_LTL_final['Pallet_qty'] = np.ceil(
         df_LTL_final['Order Quantity'] / df_LTL_final['Case_Pallet']
     )
 
-    return df_LTL_final, df_parcel_final
+    return df_LTL_final, df_LTL_errors, df_parcel_final, df_parcel_errors
 
 # -----------------------------------------------------------
 # STEP 2 - BUILD FINAL PARCEL EXPORT
@@ -201,13 +308,13 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         dtype={'ShipToPostalCode': str}
     )
     df_chub.columns = df_chub.columns.str.strip().str.replace(r"\s+", "", regex=True)
-    
+
     # Ensure ZIP is string, strip, and pad with leading zeros
     df_chub['ShipToPostalCode'] = (
         df_chub['ShipToPostalCode']
         .astype(str)
         .str.strip()
-        .str.replace(r'\.0$', '', regex=True)  # removes Excel float artifact like 12345.0
+        .str.replace(r'\.0$', '', regex=True)
         .str.zfill(5)
     )
 
@@ -281,8 +388,14 @@ def to_excel_bytes(df, sheet_name="Sheet1"):
 if 'df_LTL_final' not in st.session_state:
     st.session_state.df_LTL_final = None
 
+if 'df_LTL_errors' not in st.session_state:
+    st.session_state.df_LTL_errors = None
+
 if 'df_parcel_final' not in st.session_state:
     st.session_state.df_parcel_final = None
+
+if 'df_parcel_errors' not in st.session_state:
+    st.session_state.df_parcel_errors = None
 
 if 'parcel_df_export' not in st.session_state:
     st.session_state.parcel_df_export = None
@@ -298,20 +411,16 @@ with st.expander("How this tool works"):
     **Step 1**
     - Upload one or more SAP Order Export files
     - The tool creates:
-      - **LTL output**
-      - **Parcel intermediate output**
+      - **LTL Final**
+      - **LTL Review**
+      - **Parcel Final**
+      - **Parcel Review**
 
     **Step 2**
     - Upload:
       - **DN Excel file**
       - **search_CHUB CSV**
     - The tool creates the **final Parcel export**
-
-    **Recommended flow**
-    1. Process SAP files
-    2. Review previews
-    3. Upload DN + CHUB files
-    4. Download final parcel file
     """)
 
 st.markdown("---")
@@ -338,42 +447,74 @@ uploaded_files = st.file_uploader(
     key="sap_files"
 )
 
-col1, col2 = st.columns([1, 3])
-
-with col1:
-    process_step1 = st.button("Process SAP Files", use_container_width=True)
+process_step1 = st.button("Process SAP Files", use_container_width=True)
 
 if uploaded_files and process_step1:
     try:
-        df_LTL_final, df_parcel_final = process_order_export(uploaded_files, ltl_qty_df)
+        df_LTL_final, df_LTL_errors, df_parcel_final, df_parcel_errors = process_order_export(
+            uploaded_files,
+            ltl_qty_df
+        )
 
         st.session_state.df_LTL_final = df_LTL_final
+        st.session_state.df_LTL_errors = df_LTL_errors
         st.session_state.df_parcel_final = df_parcel_final
+        st.session_state.df_parcel_errors = df_parcel_errors
         st.session_state.parcel_df_export = None
 
         st.success("Step 1 completed successfully.")
     except Exception as e:
         st.error(f"❌ Error processing SAP files: {e}")
 
-if st.session_state.df_LTL_final is not None and st.session_state.df_parcel_final is not None:
-    tab1, tab2 = st.tabs(["LTL Preview", "Parcel Preview"])
+if (
+    st.session_state.df_LTL_final is not None and
+    st.session_state.df_LTL_errors is not None and
+    st.session_state.df_parcel_final is not None and
+    st.session_state.df_parcel_errors is not None
+):
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "LTL Final",
+        "LTL Review",
+        "Parcel Final",
+        "Parcel Review"
+    ])
 
     with tab1:
         st.dataframe(st.session_state.df_LTL_final, use_container_width=True)
         st.download_button(
-            "⬇️ Download Cleaned LTL File",
-            data=to_excel_bytes(st.session_state.df_LTL_final, "LTL_Output"),
-            file_name="LTL_Cleaned.xlsx",
+            "⬇️ Download LTL Final",
+            data=to_excel_bytes(st.session_state.df_LTL_final, "LTL_Final"),
+            file_name="LTL_Final.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
     with tab2:
+        st.dataframe(st.session_state.df_LTL_errors, use_container_width=True)
+        st.download_button(
+            "⬇️ Download LTL Review",
+            data=to_excel_bytes(st.session_state.df_LTL_errors, "LTL_Review"),
+            file_name="LTL_Review.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+    with tab3:
         st.dataframe(st.session_state.df_parcel_final, use_container_width=True)
         st.download_button(
-            "⬇️ Download Intermediate Parcel File",
-            data=to_excel_bytes(st.session_state.df_parcel_final, "Parcel_Output"),
-            file_name="Parcel_Cleaned.xlsx",
+            "⬇️ Download Parcel Final",
+            data=to_excel_bytes(st.session_state.df_parcel_final, "Parcel_Final"),
+            file_name="Parcel_Final.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+    with tab4:
+        st.dataframe(st.session_state.df_parcel_errors, use_container_width=True)
+        st.download_button(
+            "⬇️ Download Parcel Review",
+            data=to_excel_bytes(st.session_state.df_parcel_errors, "Parcel_Review"),
+            file_name="Parcel_Review.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )

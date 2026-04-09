@@ -364,6 +364,8 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     )
 
     parcel_df_export = parcel_df_export.drop_duplicates()
+    # Add SAP Carrier Code
+    parcel_df_export['SAP_Carrier_Code'] = '33120'
 
     cols_to_drop = ['PONumber', 'Region', 'Name ship-to party', 'Status_x', 'Status_y']
     cols_existing_to_drop = [col for col in cols_to_drop if col in parcel_df_export.columns]

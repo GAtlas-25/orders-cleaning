@@ -442,11 +442,12 @@ with st.expander("How this tool works"):
     st.markdown("""
     **Step 1**
     - Upload one or more SAP Order Export files
-    - Review exception rows separately for:
+    - Select one workflow:
       - **LTL**
       - **Parcel**
-    - Checked review rows are added back into the final tables
-    - Approved rows are removed from the review tables
+    - Only the selected workflow is shown full page
+    - Checked review rows are added back into the final table
+    - Approved rows are removed from the review table
 
     **Step 2**
     - Uses the approved **Parcel Final** table
@@ -469,7 +470,7 @@ except Exception as e:
     st.stop()
 
 # -----------------------------------------------------------
-# STEP 1 - FILE UPLOAD
+# STEP 1 - FILE UPLOAD + MODE SELECTION
 # -----------------------------------------------------------
 st.subheader("Step 1 · Upload SAP Order Export files")
 
@@ -481,9 +482,16 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
-    process_all = st.button("Process Files", use_container_width=True)
+    process_mode = st.radio(
+        "Choose order type",
+        ["LTL", "Parcel"],
+        horizontal=True,
+        key="process_mode"
+    )
 
-    if process_all:
+    process_selected = st.button(f"Process {process_mode}", use_container_width=True)
+
+    if process_selected:
         try:
             df_LTL_auto_final, df_LTL_errors, df_parcel_auto_final, df_parcel_errors = process_order_export(
                 uploaded_files,
@@ -498,7 +506,6 @@ if uploaded_files:
             st.session_state.df_parcel_errors = df_parcel_errors
             st.session_state.df_parcel_final = df_parcel_auto_final.copy()
 
-            # Persist editable review tables
             st.session_state.ltl_review_table = df_LTL_errors.copy()
             st.session_state.ltl_review_table['Approve'] = False
 
@@ -507,181 +514,174 @@ if uploaded_files:
 
             st.session_state.parcel_df_export = None
 
-            st.success("Files processed successfully.")
+            st.success(f"{process_mode} data processed successfully.")
         except Exception as e:
             st.error(f"❌ Error processing SAP files: {e}")
 else:
     st.info("Upload SAP Order Export Excel files to begin.")
 
 # -----------------------------------------------------------
-# STEP 1 - TWO LANES
+# STEP 1 - SHOW ONLY SELECTED WORKFLOW
 # -----------------------------------------------------------
-if (
-    st.session_state.ltl_review_table is not None and
-    st.session_state.parcel_review_table is not None and
-    st.session_state.df_LTL_final is not None and
-    st.session_state.df_parcel_final is not None
-):
-    st.markdown("---")
-    st.subheader("Step 1 · Review and approve")
+if uploaded_files and st.session_state.get("process_mode") == "LTL":
+    if (
+        st.session_state.ltl_review_table is not None and
+        st.session_state.df_LTL_final is not None
+    ):
+        st.markdown("---")
+        st.subheader("Step 1 · LTL Review")
 
-    lane_ltl, lane_parcel = st.columns(2)
+        tab1, tab2 = st.tabs(["LTL Review", "LTL Final"])
 
-    # -------------------------------
-    # LTL SIDE
-    # -------------------------------
-    with lane_ltl:
-        st.markdown("### LTL")
+        with tab1:
+            edited_ltl = st.data_editor(
+                st.session_state.ltl_review_table,
+                use_container_width=True,
+                hide_index=True,
+                key="ltl_review_editor"
+            )
 
-        edited_ltl = st.data_editor(
-            st.session_state.ltl_review_table,
-            use_container_width=True,
-            hide_index=True,
-            key="ltl_review_editor"
-        )
+            st.session_state.ltl_review_table = edited_ltl.copy()
 
-        # persist latest edited state
-        st.session_state.ltl_review_table = edited_ltl.copy()
+            if st.button("Add approved rows to LTL Final", use_container_width=True, key="approve_ltl"):
+                approved_ltl = get_approved_rows(st.session_state.ltl_review_table)
 
-        if st.button("Add approved rows to LTL Final", use_container_width=True, key="approve_ltl"):
-            approved_ltl = get_approved_rows(st.session_state.ltl_review_table)
+                if approved_ltl.empty:
+                    st.warning("No LTL rows were approved.")
+                else:
+                    current_final = st.session_state.df_LTL_final.copy()
 
-            if approved_ltl.empty:
-                st.warning("No LTL rows were approved.")
-            else:
-                current_final = st.session_state.df_LTL_final.copy()
+                    for col in current_final.columns:
+                        if col not in approved_ltl.columns:
+                            approved_ltl[col] = np.nan
 
-                for col in current_final.columns:
-                    if col not in approved_ltl.columns:
-                        approved_ltl[col] = np.nan
+                    approved_ltl = approved_ltl[current_final.columns]
 
-                approved_ltl = approved_ltl[current_final.columns]
+                    # APPEND BACK THE APPROVED REVIEW ROWS TO LTL FINAL
+                    st.session_state.df_LTL_final = (
+                        pd.concat([current_final, approved_ltl], ignore_index=True)
+                        .drop_duplicates()
+                        .reset_index(drop=True)
+                    )
 
-                # ---------------------------------------------------
-                # APPEND BACK THE APPROVED REVIEW ROWS TO LTL FINAL
-                # ---------------------------------------------------
-                st.session_state.df_LTL_final = (
-                    pd.concat([current_final, approved_ltl], ignore_index=True)
-                    .drop_duplicates()
-                    .reset_index(drop=True)
-                )
+                    # Remove approved rows from LTL review table
+                    st.session_state.ltl_review_table = (
+                        st.session_state.ltl_review_table[
+                            st.session_state.ltl_review_table['Approve'] != True
+                        ]
+                        .copy()
+                        .reset_index(drop=True)
+                    )
 
-                # Remove approved rows from LTL review table
-                st.session_state.ltl_review_table = (
-                    st.session_state.ltl_review_table[
-                        st.session_state.ltl_review_table['Approve'] != True
-                    ]
-                    .copy()
-                    .reset_index(drop=True)
-                )
+                    if 'Approve' in st.session_state.ltl_review_table.columns:
+                        st.session_state.ltl_review_table['Approve'] = False
 
-                if 'Approve' in st.session_state.ltl_review_table.columns:
-                    st.session_state.ltl_review_table['Approve'] = False
+                    st.success(f"Added {len(approved_ltl)} row(s) to LTL Final.")
 
-                st.success(f"Added {len(approved_ltl)} row(s) to LTL Final.")
+            ltl_review_download = st.session_state.ltl_review_table.copy()
+            if 'Approve' in ltl_review_download.columns:
+                ltl_review_download = ltl_review_download.drop(columns=['Approve'])
 
-        st.markdown("#### LTL Final")
-        st.dataframe(st.session_state.df_LTL_final, use_container_width=True)
+            st.download_button(
+                "⬇️ Download LTL Review",
+                data=to_excel_bytes(ltl_review_download, "LTL_Review"),
+                file_name="LTL_Review.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="download_ltl_review"
+            )
 
-        st.download_button(
-            "⬇️ Download LTL Final",
-            data=to_excel_bytes(st.session_state.df_LTL_final, "LTL_Final"),
-            file_name="LTL_Final.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key="download_ltl_final"
-        )
+        with tab2:
+            st.dataframe(st.session_state.df_LTL_final, use_container_width=True)
 
-        ltl_review_download = st.session_state.ltl_review_table.copy()
-        if 'Approve' in ltl_review_download.columns:
-            ltl_review_download = ltl_review_download.drop(columns=['Approve'])
+            st.download_button(
+                "⬇️ Download LTL Final",
+                data=to_excel_bytes(st.session_state.df_LTL_final, "LTL_Final"),
+                file_name="LTL_Final.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="download_ltl_final"
+            )
 
-        st.download_button(
-            "⬇️ Download LTL Review",
-            data=to_excel_bytes(ltl_review_download, "LTL_Review"),
-            file_name="LTL_Review.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key="download_ltl_review"
-        )
+if uploaded_files and st.session_state.get("process_mode") == "Parcel":
+    if (
+        st.session_state.parcel_review_table is not None and
+        st.session_state.df_parcel_final is not None
+    ):
+        st.markdown("---")
+        st.subheader("Step 1 · Parcel Review")
 
-    # -------------------------------
-    # PARCEL SIDE
-    # -------------------------------
-    with lane_parcel:
-        st.markdown("### Parcel")
+        tab1, tab2 = st.tabs(["Parcel Review", "Parcel Final"])
 
-        edited_parcel = st.data_editor(
-            st.session_state.parcel_review_table,
-            use_container_width=True,
-            hide_index=True,
-            key="parcel_review_editor"
-        )
+        with tab1:
+            edited_parcel = st.data_editor(
+                st.session_state.parcel_review_table,
+                use_container_width=True,
+                hide_index=True,
+                key="parcel_review_editor"
+            )
 
-        # persist latest edited state
-        st.session_state.parcel_review_table = edited_parcel.copy()
+            st.session_state.parcel_review_table = edited_parcel.copy()
 
-        if st.button("Add approved rows to Parcel Final", use_container_width=True, key="approve_parcel"):
-            approved_parcel = get_approved_rows(st.session_state.parcel_review_table)
+            if st.button("Add approved rows to Parcel Final", use_container_width=True, key="approve_parcel"):
+                approved_parcel = get_approved_rows(st.session_state.parcel_review_table)
 
-            if approved_parcel.empty:
-                st.warning("No Parcel rows were approved.")
-            else:
-                current_final = st.session_state.df_parcel_final.copy()
+                if approved_parcel.empty:
+                    st.warning("No Parcel rows were approved.")
+                else:
+                    current_final = st.session_state.df_parcel_final.copy()
 
-                for col in current_final.columns:
-                    if col not in approved_parcel.columns:
-                        approved_parcel[col] = np.nan
+                    for col in current_final.columns:
+                        if col not in approved_parcel.columns:
+                            approved_parcel[col] = np.nan
 
-                approved_parcel = approved_parcel[current_final.columns]
+                    approved_parcel = approved_parcel[current_final.columns]
 
-                # ------------------------------------------------------
-                # APPEND BACK THE APPROVED REVIEW ROWS TO PARCEL FINAL
-                # ------------------------------------------------------
-                st.session_state.df_parcel_final = (
-                    pd.concat([current_final, approved_parcel], ignore_index=True)
-                    .drop_duplicates()
-                    .reset_index(drop=True)
-                )
+                    # APPEND BACK THE APPROVED REVIEW ROWS TO PARCEL FINAL
+                    st.session_state.df_parcel_final = (
+                        pd.concat([current_final, approved_parcel], ignore_index=True)
+                        .drop_duplicates()
+                        .reset_index(drop=True)
+                    )
 
-                # Remove approved rows from Parcel review table
-                st.session_state.parcel_review_table = (
-                    st.session_state.parcel_review_table[
-                        st.session_state.parcel_review_table['Approve'] != True
-                    ]
-                    .copy()
-                    .reset_index(drop=True)
-                )
+                    # Remove approved rows from Parcel review table
+                    st.session_state.parcel_review_table = (
+                        st.session_state.parcel_review_table[
+                            st.session_state.parcel_review_table['Approve'] != True
+                        ]
+                        .copy()
+                        .reset_index(drop=True)
+                    )
 
-                if 'Approve' in st.session_state.parcel_review_table.columns:
-                    st.session_state.parcel_review_table['Approve'] = False
+                    if 'Approve' in st.session_state.parcel_review_table.columns:
+                        st.session_state.parcel_review_table['Approve'] = False
 
-                st.success(f"Added {len(approved_parcel)} row(s) to Parcel Final.")
+                    st.success(f"Added {len(approved_parcel)} row(s) to Parcel Final.")
 
-        st.markdown("#### Parcel Final")
-        st.dataframe(st.session_state.df_parcel_final, use_container_width=True)
+            parcel_review_download = st.session_state.parcel_review_table.copy()
+            if 'Approve' in parcel_review_download.columns:
+                parcel_review_download = parcel_review_download.drop(columns=['Approve'])
 
-        st.download_button(
-            "⬇️ Download Parcel Final",
-            data=to_excel_bytes(st.session_state.df_parcel_final, "Parcel_Final"),
-            file_name="Parcel_Final.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key="download_parcel_final"
-        )
+            st.download_button(
+                "⬇️ Download Parcel Review",
+                data=to_excel_bytes(parcel_review_download, "Parcel_Review"),
+                file_name="Parcel_Review.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="download_parcel_review"
+            )
 
-        parcel_review_download = st.session_state.parcel_review_table.copy()
-        if 'Approve' in parcel_review_download.columns:
-            parcel_review_download = parcel_review_download.drop(columns=['Approve'])
+        with tab2:
+            st.dataframe(st.session_state.df_parcel_final, use_container_width=True)
 
-        st.download_button(
-            "⬇️ Download Parcel Review",
-            data=to_excel_bytes(parcel_review_download, "Parcel_Review"),
-            file_name="Parcel_Review.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
-            key="download_parcel_review"
-        )
+            st.download_button(
+                "⬇️ Download Parcel Final",
+                data=to_excel_bytes(st.session_state.df_parcel_final, "Parcel_Final"),
+                file_name="Parcel_Final.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="download_parcel_final"
+            )
 
 st.markdown("---")
 
@@ -690,8 +690,8 @@ st.markdown("---")
 # -----------------------------------------------------------
 st.subheader("Step 2 · Build Final Parcel Export")
 
-if st.session_state.df_parcel_final is None:
-    st.info("Complete Step 1 first to unlock the final parcel export.")
+if st.session_state.get("process_mode") != "Parcel" or st.session_state.df_parcel_final is None:
+    st.info("Select Parcel and complete Step 1 to unlock the final parcel export.")
 else:
     col_a, col_b = st.columns(2)
 

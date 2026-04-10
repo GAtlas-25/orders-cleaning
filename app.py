@@ -417,7 +417,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     parcel_df_export[['First Name','Last Name']] = (parcel_df_export['ShipToName'].str.strip().str.split(r'\s+', n=1, expand=True))
 
     # Rename Columns to match POM names
-    parcel_df_export = parcel_df_export.rename(columns:{
+    parcel_df_export = parcel_df_export.rename(columns={
         'ShipToAddress':'Address',
         'ShipToCity':'City',
         'ShipToState':'State',

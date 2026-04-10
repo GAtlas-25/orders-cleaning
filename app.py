@@ -22,6 +22,33 @@ def load_ltl_qty():
     return pd.read_excel(LTL_QTY_PATH)
 
 # -----------------------------------------------------------
+# HELPERS
+# -----------------------------------------------------------
+def make_row_key(df):
+    return (
+        df['Purchase order no.'].astype(str).fillna('') + '|' +
+        df['Status'].astype(str).fillna('') + '|' +
+        df['Orig'].astype(str).fillna('')
+    )
+
+def to_excel_bytes(df, sheet_name="Sheet1"):
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    return buffer.getvalue()
+
+def get_approved_rows(df_with_checks):
+    if df_with_checks is None or df_with_checks.empty or 'Approve' not in df_with_checks.columns:
+        return pd.DataFrame()
+
+    approved = df_with_checks[df_with_checks['Approve'] == True].copy()
+    if approved.empty:
+        return approved
+
+    approved = approved.drop(columns=['Approve'])
+    return approved
+
+# -----------------------------------------------------------
 # STEP 1 - PROCESS SAP ORDER EXPORT
 # -----------------------------------------------------------
 def process_order_export(files, ltl_qty_df):
@@ -88,7 +115,7 @@ def process_order_export(files, ltl_qty_df):
     # Clean key columns before flags
     df_LTL_clean['Batch'] = df_LTL_clean['Batch'].astype(str).str.strip()
 
-    # Normalize PO and Batch empties for flags
+    # Normalize empties
     df_LTL_clean['Purchase order no.'] = df_LTL_clean['Purchase order no.'].replace(
         ['', ' ', 'NaN', 'nan', 'None'],
         pd.NA
@@ -145,23 +172,23 @@ def process_order_export(files, ltl_qty_df):
 
     df_LTL_grouped = df_LTL_grouped.sort_values(['Purchase order no.', 'Orig']).reset_index(drop=True)
 
-    # Normalize grouped columns
     for col in ['Purchase order no.', 'Batch', 'LTL Qty']:
         df_LTL_grouped[col] = df_LTL_grouped[col].replace(['', ' ', 'NaN', 'nan', 'None'], pd.NA)
 
-    ##########################################
-    #### Create final output tables
+    # -------------------------------------------------------
+    # Build initial FINAL and REVIEW tables
+    # -------------------------------------------------------
 
-    # LTL FINAL
+    # LTL final candidates
     df_LTL_final = df_LTL_grouped[
         (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
         (
-            (df_LTL_grouped['LTL Qty'].isna() == True) &
+            (df_LTL_grouped['LTL Qty'].isna()) &
             (df_LTL_grouped['Status'] == 'Found')
         )
     ].copy()
 
-    # LTL REVIEW
+    # LTL review
     df_LTL_errors = df_LTL_grouped[
         (
             (
@@ -190,7 +217,7 @@ def process_order_export(files, ltl_qty_df):
         )
     ].copy()
 
-    # PARCEL FINAL
+    # Parcel final candidates
     df_parcel_final = df_LTL_grouped[
         (
             (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) &
@@ -199,7 +226,7 @@ def process_order_export(files, ltl_qty_df):
         (df_LTL_grouped['Material'].astype(str).str.startswith('5'))
     ].copy()
 
-    # PARCEL REVIEW
+    # Parcel review
     df_parcel_errors = df_LTL_grouped[
         (
             (
@@ -220,12 +247,24 @@ def process_order_export(files, ltl_qty_df):
         )
     ].copy()
 
-    # Final cleaning for output
-    df_LTL_final = df_LTL_final.drop(columns=['LTL Qty', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509'])
-    df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509'])
+    # -------------------------------------------------------
+    # Remove review rows from final tables using row_key
+    # -------------------------------------------------------
+    df_LTL_final['row_key'] = make_row_key(df_LTL_final)
+    df_LTL_errors['row_key'] = make_row_key(df_LTL_errors)
+    df_LTL_final = df_LTL_final[~df_LTL_final['row_key'].isin(df_LTL_errors['row_key'])].copy()
 
-    df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch'])
-    df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch'])
+    df_parcel_final['row_key'] = make_row_key(df_parcel_final)
+    df_parcel_errors['row_key'] = make_row_key(df_parcel_errors)
+    df_parcel_final = df_parcel_final[~df_parcel_final['row_key'].isin(df_parcel_errors['row_key'])].copy()
+
+    # Final cleaning for output
+    df_LTL_final = df_LTL_final.drop(columns=['LTL Qty', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'row_key'])
+    df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'row_key'])
+
+    # Keep flags in review tables so CS can understand why rows need review
+    df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key'])
+    df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key'])
 
     df_LTL_final['Pallet_qty'] = np.ceil(
         df_LTL_final['Order Quantity'] / df_LTL_final['Case_Pallet']
@@ -237,9 +276,6 @@ def process_order_export(files, ltl_qty_df):
 # STEP 2 - BUILD FINAL PARCEL EXPORT
 # -----------------------------------------------------------
 def process_parcel_export(df_parcel_final, dn_file, chub_file):
-    # -------------------------------
-    # DN FILE
-    # -------------------------------
     dn_df = pd.read_excel(dn_file)
 
     dn_cols = [
@@ -281,9 +317,6 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     df_filtered['Delivery'] = df_filtered['Delivery'].astype(str).str.strip()
     df_filtered['Sales document'] = df_filtered['Sales document'].astype(str).str.strip()
 
-    # -------------------------------
-    # MERGE WITH PARCEL DATA
-    # -------------------------------
     df_parcel_final = df_parcel_final.copy()
     df_parcel_final['Sales document'] = df_parcel_final['Sales document'].astype(str).str.strip()
 
@@ -297,9 +330,6 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     merged_parcel_df = merged_parcel_df.drop_duplicates()
     merged_parcel_df = merged_parcel_df.fillna('')
 
-    # -------------------------------
-    # CHUB FILE
-    # -------------------------------
     df_chub = pd.read_csv(
         chub_file,
         skiprows=4,
@@ -309,7 +339,6 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     )
     df_chub.columns = df_chub.columns.str.strip().str.replace(r"\s+", "", regex=True)
 
-    # Ensure ZIP is string, strip, and pad with leading zeros
     df_chub['ShipToPostalCode'] = (
         df_chub['ShipToPostalCode']
         .astype(str)
@@ -364,8 +393,6 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     )
 
     parcel_df_export = parcel_df_export.drop_duplicates()
-    # Add SAP Carrier Code
-    parcel_df_export['SAP_Carrier_Code'] = '33120'
 
     cols_to_drop = ['PONumber', 'Region', 'Name ship-to party', 'Status_x', 'Status_y']
     cols_existing_to_drop = [col for col in cols_to_drop if col in parcel_df_export.columns]
@@ -376,28 +403,31 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     return parcel_df_export
 
 # -----------------------------------------------------------
-# DOWNLOAD HELPER
-# -----------------------------------------------------------
-def to_excel_bytes(df, sheet_name="Sheet1"):
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name=sheet_name)
-    return buffer.getvalue()
-
-# -----------------------------------------------------------
 # SESSION STATE
 # -----------------------------------------------------------
-if 'df_LTL_final' not in st.session_state:
-    st.session_state.df_LTL_final = None
+if 'df_LTL_auto_final' not in st.session_state:
+    st.session_state.df_LTL_auto_final = None
 
 if 'df_LTL_errors' not in st.session_state:
     st.session_state.df_LTL_errors = None
 
-if 'df_parcel_final' not in st.session_state:
-    st.session_state.df_parcel_final = None
+if 'df_LTL_final' not in st.session_state:
+    st.session_state.df_LTL_final = None
+
+if 'df_parcel_auto_final' not in st.session_state:
+    st.session_state.df_parcel_auto_final = None
 
 if 'df_parcel_errors' not in st.session_state:
     st.session_state.df_parcel_errors = None
+
+if 'df_parcel_final' not in st.session_state:
+    st.session_state.df_parcel_final = None
+
+if 'ltl_review_table' not in st.session_state:
+    st.session_state.ltl_review_table = None
+
+if 'parcel_review_table' not in st.session_state:
+    st.session_state.parcel_review_table = None
 
 if 'parcel_df_export' not in st.session_state:
     st.session_state.parcel_df_export = None
@@ -412,13 +442,14 @@ with st.expander("How this tool works"):
     st.markdown("""
     **Step 1**
     - Upload one or more SAP Order Export files
-    - The tool creates:
-      - **LTL Final**
-      - **LTL Review**
-      - **Parcel Final**
-      - **Parcel Review**
+    - Review exception rows separately for:
+      - **LTL**
+      - **Parcel**
+    - Checked review rows are added back into the final tables
+    - Approved rows are removed from the review tables
 
     **Step 2**
+    - Uses the approved **Parcel Final** table
     - Upload:
       - **DN Excel file**
       - **search_CHUB CSV**
@@ -438,9 +469,9 @@ except Exception as e:
     st.stop()
 
 # -----------------------------------------------------------
-# STEP 1 UI
+# STEP 1 - FILE UPLOAD
 # -----------------------------------------------------------
-st.subheader("Step 1 · Process SAP Order Export files")
+st.subheader("Step 1 · Upload SAP Order Export files")
 
 uploaded_files = st.file_uploader(
     "Upload SAP Order Export Excel file(s)",
@@ -449,76 +480,207 @@ uploaded_files = st.file_uploader(
     key="sap_files"
 )
 
-process_step1 = st.button("Process SAP Files", use_container_width=True)
+if uploaded_files:
+    process_all = st.button("Process Files", use_container_width=True)
 
-if uploaded_files and process_step1:
-    try:
-        df_LTL_final, df_LTL_errors, df_parcel_final, df_parcel_errors = process_order_export(
-            uploaded_files,
-            ltl_qty_df
+    if process_all:
+        try:
+            df_LTL_auto_final, df_LTL_errors, df_parcel_auto_final, df_parcel_errors = process_order_export(
+                uploaded_files,
+                ltl_qty_df
+            )
+
+            st.session_state.df_LTL_auto_final = df_LTL_auto_final
+            st.session_state.df_LTL_errors = df_LTL_errors
+            st.session_state.df_LTL_final = df_LTL_auto_final.copy()
+
+            st.session_state.df_parcel_auto_final = df_parcel_auto_final
+            st.session_state.df_parcel_errors = df_parcel_errors
+            st.session_state.df_parcel_final = df_parcel_auto_final.copy()
+
+            # Persist editable review tables
+            st.session_state.ltl_review_table = df_LTL_errors.copy()
+            st.session_state.ltl_review_table['Approve'] = False
+
+            st.session_state.parcel_review_table = df_parcel_errors.copy()
+            st.session_state.parcel_review_table['Approve'] = False
+
+            st.session_state.parcel_df_export = None
+
+            st.success("Files processed successfully.")
+        except Exception as e:
+            st.error(f"❌ Error processing SAP files: {e}")
+else:
+    st.info("Upload SAP Order Export Excel files to begin.")
+
+# -----------------------------------------------------------
+# STEP 1 - TWO LANES
+# -----------------------------------------------------------
+if (
+    st.session_state.ltl_review_table is not None and
+    st.session_state.parcel_review_table is not None and
+    st.session_state.df_LTL_final is not None and
+    st.session_state.df_parcel_final is not None
+):
+    st.markdown("---")
+    st.subheader("Step 1 · Review and approve")
+
+    lane_ltl, lane_parcel = st.columns(2)
+
+    # -------------------------------
+    # LTL SIDE
+    # -------------------------------
+    with lane_ltl:
+        st.markdown("### LTL")
+
+        edited_ltl = st.data_editor(
+            st.session_state.ltl_review_table,
+            use_container_width=True,
+            hide_index=True,
+            key="ltl_review_editor"
         )
 
-        st.session_state.df_LTL_final = df_LTL_final
-        st.session_state.df_LTL_errors = df_LTL_errors
-        st.session_state.df_parcel_final = df_parcel_final
-        st.session_state.df_parcel_errors = df_parcel_errors
-        st.session_state.parcel_df_export = None
+        # persist latest edited state
+        st.session_state.ltl_review_table = edited_ltl.copy()
 
-        st.success("Step 1 completed successfully.")
-    except Exception as e:
-        st.error(f"❌ Error processing SAP files: {e}")
+        if st.button("Add approved rows to LTL Final", use_container_width=True, key="approve_ltl"):
+            approved_ltl = get_approved_rows(st.session_state.ltl_review_table)
 
-if (
-    st.session_state.df_LTL_final is not None and
-    st.session_state.df_LTL_errors is not None and
-    st.session_state.df_parcel_final is not None and
-    st.session_state.df_parcel_errors is not None
-):
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "LTL Final",
-        "LTL Review",
-        "Parcel Final",
-        "Parcel Review"
-    ])
+            if approved_ltl.empty:
+                st.warning("No LTL rows were approved.")
+            else:
+                current_final = st.session_state.df_LTL_final.copy()
 
-    with tab1:
+                for col in current_final.columns:
+                    if col not in approved_ltl.columns:
+                        approved_ltl[col] = np.nan
+
+                approved_ltl = approved_ltl[current_final.columns]
+
+                # ---------------------------------------------------
+                # APPEND BACK THE APPROVED REVIEW ROWS TO LTL FINAL
+                # ---------------------------------------------------
+                st.session_state.df_LTL_final = (
+                    pd.concat([current_final, approved_ltl], ignore_index=True)
+                    .drop_duplicates()
+                    .reset_index(drop=True)
+                )
+
+                # Remove approved rows from LTL review table
+                st.session_state.ltl_review_table = (
+                    st.session_state.ltl_review_table[
+                        st.session_state.ltl_review_table['Approve'] != True
+                    ]
+                    .copy()
+                    .reset_index(drop=True)
+                )
+
+                if 'Approve' in st.session_state.ltl_review_table.columns:
+                    st.session_state.ltl_review_table['Approve'] = False
+
+                st.success(f"Added {len(approved_ltl)} row(s) to LTL Final.")
+
+        st.markdown("#### LTL Final")
         st.dataframe(st.session_state.df_LTL_final, use_container_width=True)
+
         st.download_button(
             "⬇️ Download LTL Final",
             data=to_excel_bytes(st.session_state.df_LTL_final, "LTL_Final"),
             file_name="LTL_Final.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="download_ltl_final"
         )
 
-    with tab2:
-        st.dataframe(st.session_state.df_LTL_errors, use_container_width=True)
+        ltl_review_download = st.session_state.ltl_review_table.copy()
+        if 'Approve' in ltl_review_download.columns:
+            ltl_review_download = ltl_review_download.drop(columns=['Approve'])
+
         st.download_button(
             "⬇️ Download LTL Review",
-            data=to_excel_bytes(st.session_state.df_LTL_errors, "LTL_Review"),
+            data=to_excel_bytes(ltl_review_download, "LTL_Review"),
             file_name="LTL_Review.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="download_ltl_review"
         )
 
-    with tab3:
+    # -------------------------------
+    # PARCEL SIDE
+    # -------------------------------
+    with lane_parcel:
+        st.markdown("### Parcel")
+
+        edited_parcel = st.data_editor(
+            st.session_state.parcel_review_table,
+            use_container_width=True,
+            hide_index=True,
+            key="parcel_review_editor"
+        )
+
+        # persist latest edited state
+        st.session_state.parcel_review_table = edited_parcel.copy()
+
+        if st.button("Add approved rows to Parcel Final", use_container_width=True, key="approve_parcel"):
+            approved_parcel = get_approved_rows(st.session_state.parcel_review_table)
+
+            if approved_parcel.empty:
+                st.warning("No Parcel rows were approved.")
+            else:
+                current_final = st.session_state.df_parcel_final.copy()
+
+                for col in current_final.columns:
+                    if col not in approved_parcel.columns:
+                        approved_parcel[col] = np.nan
+
+                approved_parcel = approved_parcel[current_final.columns]
+
+                # ------------------------------------------------------
+                # APPEND BACK THE APPROVED REVIEW ROWS TO PARCEL FINAL
+                # ------------------------------------------------------
+                st.session_state.df_parcel_final = (
+                    pd.concat([current_final, approved_parcel], ignore_index=True)
+                    .drop_duplicates()
+                    .reset_index(drop=True)
+                )
+
+                # Remove approved rows from Parcel review table
+                st.session_state.parcel_review_table = (
+                    st.session_state.parcel_review_table[
+                        st.session_state.parcel_review_table['Approve'] != True
+                    ]
+                    .copy()
+                    .reset_index(drop=True)
+                )
+
+                if 'Approve' in st.session_state.parcel_review_table.columns:
+                    st.session_state.parcel_review_table['Approve'] = False
+
+                st.success(f"Added {len(approved_parcel)} row(s) to Parcel Final.")
+
+        st.markdown("#### Parcel Final")
         st.dataframe(st.session_state.df_parcel_final, use_container_width=True)
+
         st.download_button(
             "⬇️ Download Parcel Final",
             data=to_excel_bytes(st.session_state.df_parcel_final, "Parcel_Final"),
             file_name="Parcel_Final.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="download_parcel_final"
         )
 
-    with tab4:
-        st.dataframe(st.session_state.df_parcel_errors, use_container_width=True)
+        parcel_review_download = st.session_state.parcel_review_table.copy()
+        if 'Approve' in parcel_review_download.columns:
+            parcel_review_download = parcel_review_download.drop(columns=['Approve'])
+
         st.download_button(
             "⬇️ Download Parcel Review",
-            data=to_excel_bytes(st.session_state.df_parcel_errors, "Parcel_Review"),
+            data=to_excel_bytes(parcel_review_download, "Parcel_Review"),
             file_name="Parcel_Review.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="download_parcel_review"
         )
 
 st.markdown("---")

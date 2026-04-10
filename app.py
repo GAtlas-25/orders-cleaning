@@ -375,7 +375,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     df_chub['Delivery Store'] = np.where(
         df_chub['HD_Store'].notna(),
         'THD Ship to Store ' + df_chub['HD_Store'].astype(str),
-        ''
+        'Home Depot Customer'
     )
 
     df_chub['HD_Store'] = df_chub['HD_Store'].fillna('')
@@ -410,8 +410,6 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     cols_to_drop = ['PONumber', 'Region', 'Name ship-to party', 'Status_x', 'Status_y','Country Key','Description','Storage Location','Material']
     cols_existing_to_drop = [col for col in cols_to_drop if col in parcel_df_export.columns]
     parcel_df_export = parcel_df_export.drop(columns=cols_existing_to_drop)
-
-    parcel_df_export['Delivery Store'] = parcel_df_export['Delivery Store'].fillna('Home Depot Customer')
 
     # Clean Column Names and orders for final Export
     # Split ShipToName safely into First Name and Last Name

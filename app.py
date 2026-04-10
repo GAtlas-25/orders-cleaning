@@ -244,6 +244,14 @@ def process_order_export(files, ltl_qty_df):
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
                 )
             )
+            |
+            (
+                (df_LTL_grouped['Storage_2509'] & df_LTL_grouped['Orig']=='NJ') &
+                (
+                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
+                )
+            )       
         )
     ].copy()
 
@@ -394,11 +402,33 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
 
     parcel_df_export = parcel_df_export.drop_duplicates()
 
-    cols_to_drop = ['PONumber', 'Region', 'Name ship-to party', 'Status_x', 'Status_y']
+    # Add SAP Carrier Code
+    parcel_df_export['SAP_Carrier_Code'] = '33120'
+    # Add UPS account number
+    parcel_df_export['UPS_account'] = '71WV93'
+
+    cols_to_drop = ['PONumber', 'Region', 'Name ship-to party', 'Status_x', 'Status_y','Country Key','Description','Storage Location','Material']
     cols_existing_to_drop = [col for col in cols_to_drop if col in parcel_df_export.columns]
     parcel_df_export = parcel_df_export.drop(columns=cols_existing_to_drop)
 
-    parcel_df_export['Delivery Store'] = parcel_df_export['Delivery Store'].fillna('')
+    parcel_df_export['Delivery Store'] = parcel_df_export['Delivery Store'].fillna('Home Depot Customer')
+
+    # Clean Column Names and orders for final Export
+    parcel_df_export[['First Name','Last Name']] = (parcel_df_export['ShipToName'].str.strip().str.split(r'\s+', n=1, expand=True))
+
+    # Rename Columns to match POM names
+    parcel_df_export = parcel_df_export.rename(columns: {
+        'ShipToAddress':'Address',
+        'ShipToCity':'City',
+        'ShipToState':'State',
+        'ShipToPostalCode':'Zip Code',
+        'Delivery Store':'Business Name',
+        'ShipToDayPhone':'Phone Number'})
+
+    # Reorder Columns Appearance
+    parcel_df_export = parcel_df_export[['Purchase order no.','Orig','Order Quantity','Gross weight','Lines_PO','Sales_document','Delivery',
+                                         'SAP_Carrier_Code','UPS_account','Business Name','First Name','Last Name','Phone Number','Address',
+                                         'Zip Code','State','City']]
 
     return parcel_df_export
 

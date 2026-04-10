@@ -414,7 +414,17 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     parcel_df_export['Delivery Store'] = parcel_df_export['Delivery Store'].fillna('Home Depot Customer')
 
     # Clean Column Names and orders for final Export
-    parcel_df_export[['First Name','Last Name']] = (parcel_df_export['ShipToName'].str.strip().str.split(r'\s+', n=1, expand=True))
+    # Split ShipToName safely into First Name and Last Name
+    name_split = (
+        parcel_df_export['ShipToName']
+        .fillna('')
+        .astype(str)
+        .str.strip()
+        .str.split(r'\s+', n=1, expand=True)
+    )
+
+    parcel_df_export['First Name'] = name_split[0].fillna('')
+    parcel_df_export['Last Name'] = name_split[1].fillna('') if 1 in name_split.columns else ''
 
     # Rename Columns to match POM names
     parcel_df_export = parcel_df_export.rename(columns={
@@ -426,7 +436,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         'ShipToDayPhone':'Phone Number'})
 
     # Reorder Columns Appearance
-    parcel_df_export = parcel_df_export[['Purchase order no.','Orig','Order Quantity','Gross weight','Lines_PO','Sales_document','Delivery',
+    parcel_df_export = parcel_df_export[['Purchase order no.','Orig','Order Quantity','Gross weight','Lines_PO','Sales document','Delivery',
                                          'SAP_Carrier_Code','UPS_account','Business Name','First Name','Last Name','Phone Number','Address',
                                          'Zip Code','State','City']]
 

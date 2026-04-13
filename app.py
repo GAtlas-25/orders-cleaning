@@ -214,6 +214,14 @@ def process_order_export(files, ltl_qty_df):
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
+            | 
+            (
+                (df_LTL_grouped['Purchase order no.'].astype(str).strip().str.contains('_', na=False)) &
+                (
+                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                )
+            )
         )
     ].copy()
 
@@ -251,7 +259,15 @@ def process_order_export(files, ltl_qty_df):
                     (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
                 )
-            )       
+            )
+            |
+            (
+                (df_LTL_grouped['Purchase order no.'].astype(str).strip().str.contains('_', na=False)) &
+                (
+                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
+                )
+            )
         )
     ].copy()
 

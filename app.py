@@ -294,6 +294,10 @@ def process_order_export(files, ltl_qty_df):
         df_LTL_final['Order Quantity'] / df_LTL_final['Case_Pallet']
     )
 
+    df_LTL_errors['Pallet_qty'] = np.ceil(
+        df_LTL_errors['Order Quantity'] / df_LTL_errors['Case_Pallet']
+    )
+
     return df_LTL_final, df_LTL_errors, df_parcel_final, df_parcel_errors
 
 # -----------------------------------------------------------

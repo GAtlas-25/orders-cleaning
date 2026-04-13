@@ -287,7 +287,7 @@ def process_order_export(files, ltl_qty_df):
     df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'row_key'])
 
     # Keep flags in review tables so CS can understand why rows need review
-    df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key','Status'])
+    df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status'])
     df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key','Status'])
 
     df_LTL_final['Pallet_qty'] = np.ceil(

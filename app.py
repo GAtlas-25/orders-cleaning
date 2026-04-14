@@ -458,7 +458,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         'ShipToDayPhone':'Phone Number'})
 
     # Reorder Columns Appearance
-    parcel_df_export = parcel_df_export[['Purchase order no.','Orig','Order Quantity','Gross weight','Lines_PO','Sales document','Delivery',
+    parcel_df_export = parcel_df_export[['Purchase order no.','Material Status','Orig','Order Quantity','Gross weight','Lines_PO','Sales document','Delivery',
                                          'SAP_Carrier_Code','UPS_account','Business Name','First Name','Last Name','Phone Number','Address',
                                          'Zip Code','State','City']]
 

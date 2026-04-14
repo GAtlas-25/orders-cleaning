@@ -288,7 +288,11 @@ def process_order_export(files, ltl_qty_df):
 
     # Keep flags in review tables so CS can understand why rows need review
     df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status'])
-    df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key','Status'])
+    df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key'])
+
+    # rename status column
+    df_parcel_final = df_parcel_final.rename(columns={'Status': 'Material Status'})
+    df_parcel_errors = df_parcel_errors.rename(columns={'Status': 'Material Status'})
 
     df_LTL_final['Pallet_qty'] = np.ceil(
         df_LTL_final['Order Quantity'] / df_LTL_final['Case_Pallet']

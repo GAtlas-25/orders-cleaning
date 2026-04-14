@@ -567,8 +567,16 @@ if uploaded_files:
             st.session_state.ltl_review_table = df_LTL_errors.copy()
             st.session_state.ltl_review_table['Approve'] = False
 
+            # Move Approve column to first position
+            cols = ['Approve'] + [col for col in st.session_state.ltl_review_table.columns if col != 'Approve']
+            st.session_state.ltl_review_table = st.session_state.ltl_review_table[cols]
+
             st.session_state.parcel_review_table = df_parcel_errors.copy()
             st.session_state.parcel_review_table['Approve'] = False
+
+            # Move Approve column to first position
+            cols = ['Approve'] + [col for col in st.session_state.parcel_review_table.columns if col != 'Approve']
+            st.session_state.parcel_review_table = st.session_state.parcel_review_table[cols]
 
             st.session_state.parcel_df_export = None
 

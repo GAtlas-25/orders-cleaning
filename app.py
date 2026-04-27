@@ -302,6 +302,12 @@ def process_order_export(files, ltl_qty_df):
         df_LTL_errors['Order Quantity'] / df_LTL_errors['Case_Pallet']
     )
 
+    # reset index to show count of rows
+    df_LTL_final = df_LTL_final.reset_index()
+    df_LTL_errors = df_LTL_errors.reset_index()
+    df_parcel_final = df_parcel_final.reset_index()
+    df_parcel_errors = df_parcel_errors.reset_index()
+
     return df_LTL_final, df_LTL_errors, df_parcel_final, df_parcel_errors
 
 # -----------------------------------------------------------

@@ -303,10 +303,10 @@ def process_order_export(files, ltl_qty_df):
     )
 
     # reset index to show count of rows
-    df_LTL_final = df_LTL_final.reset_index()
-    df_LTL_errors = df_LTL_errors.reset_index()
-    df_parcel_final = df_parcel_final.reset_index()
-    df_parcel_errors = df_parcel_errors.reset_index()
+    df_LTL_final = df_LTL_final.reset_index(drop=True)
+    df_LTL_errors = df_LTL_errors.reset_index(drop=True)
+    df_parcel_final = df_parcel_final.reset_index(drop=True)
+    df_parcel_errors = df_parcel_errors.reset_index(drop=True)
 
     return df_LTL_final, df_LTL_errors, df_parcel_final, df_parcel_errors
 

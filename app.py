@@ -10,7 +10,7 @@ st.set_page_config(
     page_title="SAP Order Cleaning Tool",
     page_icon="📦",
     layout="wide"
-)
+)-
 
 # -----------------------------------------------------------
 # LOAD REFERENCE FILE
@@ -402,18 +402,20 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         df_chub['ShipToAddress1']
     )
 
-    df_chub['Delivery Store'] = np.where(
+    df_chub['Deliver To Address 2'] = np.where(
         df_chub['HD_Store'].notna(),
         'THD Ship to Store ' + df_chub['HD_Store'].astype(str),
-        'Home Depot Customer'
+        ''
     )
+
+    df_chub['Business Name'] = 'Home Depot Customer'
 
     df_chub['HD_Store'] = df_chub['HD_Store'].fillna('')
 
     col_to_keep = [
         'PONumber', 'ShipToName', 'ShipToAddress', 'ShipToCity',
-        'ShipToState', 'ShipToPostalCode', 'Delivery Store',
-        'ShipToDayPhone', 'Status', 'ShippingCode'
+        'ShipToState', 'ShipToPostalCode', 'Deliver To Address 2',
+        'Business Name', 'ShipToDayPhone', 'Status', 'ShippingCode'
     ]
     df_chub_filtered = df_chub[col_to_keep].copy()
 
@@ -460,12 +462,11 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         'ShipToCity':'City',
         'ShipToState':'State',
         'ShipToPostalCode':'Zip Code',
-        'Delivery Store':'Business Name',
         'ShipToDayPhone':'Phone Number'})
 
     # Reorder Columns Appearance
     parcel_df_export = parcel_df_export[['Purchase order no.','Material Status','Orig','Order Quantity','Gross weight','Lines_PO','Sales document','Delivery',
-                                         'SAP_Carrier_Code','UPS_account','Business Name','First Name','Last Name','Phone Number','Address',
+                                         'SAP_Carrier_Code','UPS_account','Business Name',''Deliver To Address 2, 'First Name','Last Name','Phone Number','Address',
                                          'Zip Code','State','City']]
 
     return parcel_df_export

@@ -74,14 +74,15 @@ def process_order_export(files, ltl_qty_df):
     )
 
     # Handle missing LTL Qty using Material Description rule - if missing in mapping but a 12x24 set ltl qty
-    df_orders['Material Description'] = df_orders['Material Description'].astype(str)
+    if 'Material Description' in df_orders.columns:
+        df_orders['Material Description'] = df_orders['Material Description'].astype(str)
 
-    mask_12_24 = (
-        df_orders['LTL Qty'].isna() &
-        df_orders['Material Description'].str.contains('12', na=False) &
-        df_orders['Material Description'].str.contains('24', na=False)
-    )
-    df_orders.loc[mask_12_24, 'LTL Qty'] = 5
+        mask_12_24 = (
+            df_orders['LTL Qty'].isna() &
+            df_orders['Material Description'].str.contains('12', na=False) &
+            df_orders['Material Description'].str.contains('24', na=False)
+        )
+        df_orders.loc[mask_12_24, 'LTL Qty'] = 5
 
     df_LTL = df_orders.copy()
 

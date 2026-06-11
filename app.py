@@ -67,11 +67,21 @@ def process_order_export(files, ltl_qty_df):
     # Merge with LTL reference
     df_orders = pd.merge(
         df_order_export,
-        ltl_qty_df[['SAP Code', 'LTL Qty', 'Case_Pallet', 'Orig']],
+        ltl_qty_df[['SAP Code', 'LTL Qty', 'Case_Pallet', 'Orig','Dept']],
         left_on='Material',
         right_on='SAP Code',
         how='left'
     )
+
+    # Handle missing LTL Qty using Material Description rule - if missing in mapping but a 12x24 set ltl qty
+    df_orders['Material Description'] = df_orders['Material Description'].astype(str)
+
+    mask_12_24 = (
+        df_orders['LTL Qty'].isna() &
+        df_orders['Material Description'].str.contains('12', na=False) &
+        df_orders['Material Description'].str.contains('24', na=False)
+    )
+    df_orders.loc[mask_12_24, 'LTL Qty'] = 5
 
     df_LTL = df_orders.copy()
 
@@ -89,6 +99,7 @@ def process_order_export(files, ltl_qty_df):
         'Gross weight',
         'Case_Pallet',
         'LTL Qty',
+        'Dept',
         'Orig',
         'Batch',
         'Storage Location',
@@ -135,6 +146,13 @@ def process_order_export(files, ltl_qty_df):
         df_LTL_clean['Batch'].isna() |
         (df_LTL_clean['Batch'].astype(str).str.strip() == '')
     )
+    
+    # if a D28 order comes through below MOQ
+    df_LTL_clean['D28_Below_MOQ'] = (
+        (df_LTL_clean['Dept'] == 'D28') &
+        (df_LTL_clean['LTL Qty'].notna()) &
+        (df_LTL_clean['Order Quantity'] < df_LTL_clean['LTL Qty'])
+    )
 
     df_LTL_clean['Storage_2509'] = df_LTL_clean['Storage Location'] == 2509
 
@@ -151,6 +169,7 @@ def process_order_export(files, ltl_qty_df):
             'Missing_PO': 'max',
             'Missing_Batch': 'max',
             'Storage_2509': 'max',
+            'D28_Below_MOQ': 'max',
             **{
                 col: 'first'
                 for col in df_LTL_clean.columns
@@ -164,7 +183,8 @@ def process_order_export(files, ltl_qty_df):
                     'Lines_PO',
                     'Missing_PO',
                     'Missing_Batch',
-                    'Storage_2509'
+                    'Storage_2509',
+                    'D28_Below_MOQ'
                 ]
             }
         })
@@ -222,6 +242,7 @@ def process_order_export(files, ltl_qty_df):
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
+            | (df_LTL_grouped['D28_Below_MOQ'])
         )
     ].copy()
 
@@ -229,7 +250,8 @@ def process_order_export(files, ltl_qty_df):
     df_parcel_final = df_LTL_grouped[
         (
             (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) &
-            (df_LTL_grouped['LTL Qty'].isna() == False)
+            (df_LTL_grouped['LTL Qty'].isna() == False) &
+            (df_LTL_grouped['D28_Below_MOQ'] == False) # Exclude
         ) |
         (df_LTL_grouped['Material'].astype(str).str.startswith('5'))
     ].copy()
@@ -285,6 +307,25 @@ def process_order_export(files, ltl_qty_df):
     # Final cleaning for output
     df_LTL_final = df_LTL_final.drop(columns=['LTL Qty', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'row_key'])
     df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'row_key'])
+
+    # -------------------------------------------------------
+    # Add human-readable review reason
+    # -------------------------------------------------------
+    df_LTL_errors['Review_Reason'] = np.select(
+        [
+            df_LTL_errors['D28_Below_MOQ'],
+            df_LTL_errors['Missing_PO'],
+            df_LTL_errors['Missing_Batch'],
+            df_LTL_errors['Storage_2509']
+        ],
+        [
+            'D28 below MOQ',
+            'Missing PO',
+            'Missing Batch',
+            'Storage Location 2509'
+        ],
+        default='Other'
+    )
 
     # Keep flags in review tables so CS can understand why rows need review
     df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status'])

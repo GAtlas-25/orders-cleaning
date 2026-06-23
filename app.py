@@ -409,6 +409,9 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
 
     merged_parcel_df = merged_parcel_df.drop_duplicates()
     merged_parcel_df = merged_parcel_df.fillna('')
+    
+    # make sure deliveries are ascending for carrier upload on SAP
+    merged_parcel_df = merged_parcel_df.sort_values('Delivery', ascending=True)
 
     df_chub = pd.read_csv(
         chub_file,
@@ -508,7 +511,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
 
     # Reorder Columns Appearance
     parcel_df_export = parcel_df_export[['Purchase order no.','Material Status','Orig','Order Quantity','Gross weight','Lines_PO','Sales document','Delivery',
-                                         'SAP_Carrier_Code','UPS_account','Business Name','Deliver To Address 2', 'First Name','Last Name','Phone Number','Address',
+                                         'SAP_Carrier_Code','UPS_account','Business Name', 'First Name','Last Name','Phone Number','Address','Deliver To Address 2',
                                          'Zip Code','State','City']]
 
     return parcel_df_export

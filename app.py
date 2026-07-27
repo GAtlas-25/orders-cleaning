@@ -277,6 +277,17 @@ def process_order_export(files, ltl_qty_df):
             )
             |
             (
+                (~df_LTL_grouped['Storage_2509']) &
+                (
+                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (
+                        df_LTL_grouped['LTL Qty'].isna() &
+                        (df_LTL_grouped['Status'] == 'Found - Sample')
+                    )
+                )
+            )
+            |
+            (
                 (df_LTL_grouped['Storage_2509'] & df_LTL_grouped['Orig']=='NJ') &
                 (
                     (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
@@ -324,6 +335,20 @@ def process_order_export(files, ltl_qty_df):
             'Missing PO',
             'Missing Batch',
             'Storage Location 2509'
+        ],
+        default='Other'
+    )
+
+    df_parcel_errors['Review_Reason'] = np.select(
+        [
+            ~df_parcel_errors['Storage_2509'],
+            df_parcel_errors['Missing_PO'],
+            df_parcel_errors['Missing_Batch']
+        ],
+        [
+            'Change Batch to THD if available',
+            'Missing PO',
+            'Missing Batch'
         ],
         default='Other'
     )

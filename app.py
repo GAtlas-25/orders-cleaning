@@ -67,7 +67,7 @@ def process_order_export(files, ltl_qty_df):
     # Merge with LTL reference
     df_orders = pd.merge(
         df_order_export,
-        ltl_qty_df[['SAP Code', 'LTL Qty', 'Case_Pallet', 'Orig','Dept']],
+        ltl_qty_df[['SAP Code', 'LTL Qty', 'Tile_Case' ,'Case_Pallet', 'Orig','Dept']],
         left_on='Material',
         right_on='SAP Code',
         how='left'
@@ -99,6 +99,7 @@ def process_order_export(files, ltl_qty_df):
         'Order Quantity',
         'Gross weight',
         'Case_Pallet',
+        'Sales unit', # it is CV or ST based on material (it impacts calculation of Pallet_qty)
         'LTL Qty',
         'Dept',
         'Orig',
@@ -361,13 +362,33 @@ def process_order_export(files, ltl_qty_df):
     df_parcel_final = df_parcel_final.rename(columns={'Status': 'Material Status'})
     df_parcel_errors = df_parcel_errors.rename(columns={'Status': 'Material Status'})
 
-    df_LTL_final['Pallet_qty'] = np.ceil(
-        df_LTL_final['Order Quantity'] / df_LTL_final['Case_Pallet']
+    ## Calculate Pallet_qty -- consider if Sales unit is ST or CV
+    df_LTL_final['Pallet_qty'] = np.where(
+        (df_LTL_final['Sales unit'] == 'ST') &
+        (df_LTL_final['Tile_Case'].fillna(0) > 0),
+        np.ceil(
+            (df_LTL_final['Order Quantity'] / df_LTL_final['Tile_Case'])
+            / df_LTL_final['Case_Pallet']
+        ),
+        np.ceil(
+            df_LTL_final['Order Quantity']
+            / df_LTL_final['Case_Pallet']
+        )
+    )
+    
+    df_LTL_errors['Pallet_qty'] = np.where(
+        (df_LTL_errors['Sales unit'] == 'ST') &
+        (df_LTL_errors['Tile_Case'].fillna(0) > 0),
+        np.ceil(
+            (df_LTL_errors['Order Quantity'] / df_LTL_errors['Tile_Case'])
+            / df_LTL_errors['Case_Pallet']
+        ),
+        np.ceil(
+            df_LTL_errors['Order Quantity']
+            / df_LTL_errors['Case_Pallet']
+        )
     )
 
-    df_LTL_errors['Pallet_qty'] = np.ceil(
-        df_LTL_errors['Order Quantity'] / df_LTL_errors['Case_Pallet']
-    )
 
     # reset index to show count of rows
     df_LTL_final = df_LTL_final.reset_index(drop=True)

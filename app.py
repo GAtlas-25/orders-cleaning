@@ -15,7 +15,7 @@ st.set_page_config(
 # -----------------------------------------------------------
 # LOAD REFERENCE FILE
 # -----------------------------------------------------------
-LTL_QTY_PATH = "LTL_qty_updated.xlsx"
+LTL_QTY_PATH = "LTL_qty_updated_7.28.26.xlsx"
 
 @st.cache_data
 def load_ltl_qty():
@@ -603,7 +603,7 @@ st.markdown("---")
 # -----------------------------------------------------------
 try:
     ltl_qty_df = load_ltl_qty()
-    st.success("Reference file loaded: LTL_qty_updated.xlsx")
+    st.success("Reference file loaded: LTL_qty_updated_7.28.26.xlsx")
 except Exception as e:
     st.error(f"❌ Error loading LTL reference file: {e}")
     st.stop()

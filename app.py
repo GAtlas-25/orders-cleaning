@@ -390,6 +390,15 @@ def process_order_export(files, ltl_qty_df):
         )
     )
 
+    # Remove helper columns used only for pallet calculation
+    df_LTL_final = df_LTL_final.drop(
+        columns=['Tile_Case', 'Sales unit'],
+        errors='ignore'
+    )
+    df_LTL_errors = df_LTL_errors.drop(
+        columns=['Tile_Case', 'Sales unit'],
+        errors='ignore'
+    )
 
     # reset index to show count of rows
     df_LTL_final = df_LTL_final.reset_index(drop=True)

@@ -98,6 +98,7 @@ def process_order_export(files, ltl_qty_df):
         'Material',
         'Order Quantity',
         'Gross weight',
+        'Tile_Case',
         'Case_Pallet',
         'Sales unit', # it is CV or ST based on material (it impacts calculation of Pallet_qty)
         'LTL Qty',

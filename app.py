@@ -281,10 +281,9 @@ def process_order_export(files, ltl_qty_df):
             (
                 (~df_LTL_grouped['Storage_2509']) &
                 (
-                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) &
                     (
-                        df_LTL_grouped['LTL Qty'].isna() &
-                        (df_LTL_grouped['Status'] == 'Found - Sample')
+                        df_LTL_grouped['Status'] != 'Found - Sample'
                     )
                 )
             )

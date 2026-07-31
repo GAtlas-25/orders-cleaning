@@ -159,6 +159,16 @@ def process_order_export(files, ltl_qty_df):
 
     df_LTL_clean['Storage_2509'] = df_LTL_clean['Storage Location'] == 2509
 
+    # some orders come in in eaches (ST). That changes how the condition LTL vs Parcel is calculated. Create helper to normalize
+    df_LTL_clean['Order_Qty_Cases'] = np.where(
+        (df_LTL_clean['Sales unit'] == 'ST') &
+        (df_LTL_clean['Tile_Case'].fillna(0) > 0),
+
+        df_LTL_clean['Order Quantity'] / df_LTL_clean['Tile_Case'],
+
+        df_LTL_clean['Order Quantity']
+    )
+
     # Grouping logic
     df_LTL_grouped = (
         df_LTL_clean
@@ -173,6 +183,7 @@ def process_order_export(files, ltl_qty_df):
             'Missing_Batch': 'max',
             'Storage_2509': 'max',
             'D28_Below_MOQ': 'max',
+            'Order_Qty_Cases': 'sum',
             **{
                 col: 'first'
                 for col in df_LTL_clean.columns
@@ -204,7 +215,7 @@ def process_order_export(files, ltl_qty_df):
 
     # LTL final candidates
     df_LTL_final = df_LTL_grouped[
-        (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+        (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
         (
             (df_LTL_grouped['LTL Qty'].isna()) &
             (df_LTL_grouped['Status'] == 'Found')
@@ -217,7 +228,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 df_LTL_grouped['Missing_PO'] &
                 (
-                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
@@ -225,7 +236,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 df_LTL_grouped['Missing_Batch'] &
                 (
-                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
@@ -233,7 +244,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 df_LTL_grouped['Storage_2509'] &
                 (
-                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
@@ -241,7 +252,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 (df_LTL_grouped['Purchase order no.'].astype(str).str.contains('_', na=False)) &
                 (
-                    (df_LTL_grouped['Order Quantity'] >= df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
@@ -252,7 +263,7 @@ def process_order_export(files, ltl_qty_df):
     # Parcel final candidates
     df_parcel_final = df_LTL_grouped[
         (
-            (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) &
+            (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) &
             (df_LTL_grouped['LTL Qty'].isna() == False) &
             (df_LTL_grouped['D28_Below_MOQ'] == False) # Exclude
         ) |
@@ -265,7 +276,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 df_LTL_grouped['Missing_PO'] &
                 (
-                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
                 )
             )
@@ -273,7 +284,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 df_LTL_grouped['Missing_Batch'] &
                 (
-                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
                 )
             )
@@ -281,7 +292,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 (~df_LTL_grouped['Storage_2509']) &
                 (
-                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) &
+                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) &
                     (
                         df_LTL_grouped['Status'] != 'Found - Sample'
                     )
@@ -291,7 +302,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 (df_LTL_grouped['Storage_2509'] & df_LTL_grouped['Orig']=='NJ') &
                 (
-                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
                 )
             )
@@ -299,7 +310,7 @@ def process_order_export(files, ltl_qty_df):
             (
                 (df_LTL_grouped['Purchase order no.'].astype(str).str.contains('_', na=False)) &
                 (
-                    (df_LTL_grouped['Order Quantity'] < df_LTL_grouped['LTL Qty']) |
+                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
                     (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
                 )
             )

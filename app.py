@@ -340,13 +340,15 @@ def process_order_export(files, ltl_qty_df):
             df_LTL_errors['D28_Below_MOQ'],
             df_LTL_errors['Missing_PO'],
             df_LTL_errors['Missing_Batch'],
-            df_LTL_errors['Storage_2509']
+            df_LTL_errors['Storage_2509'],
+            df_LTL_errors['Purchase order no.'].astype(str).str.contains('_', na=False)
         ],
         [
             'D28 below MOQ',
             'Missing PO',
             'Missing Batch',
             'Cancel Order - Wrong Shipping method requested' #order came in as Storage Location 2509 (parcel) but should be a LTL
+            'Special Order'
         ],
         default='Other'
     )
@@ -355,19 +357,23 @@ def process_order_export(files, ltl_qty_df):
         [
             ~df_parcel_errors['Storage_2509'],
             df_parcel_errors['Missing_PO'],
-            df_parcel_errors['Missing_Batch']
+            df_parcel_errors['Missing_Batch'],
+            df_LTL_errors['Purchase order no.'].astype(str).str.contains('_', na=False)
         ],
         [
             'Change Batch to THD if available',
             'Missing PO',
-            'Missing Batch'
+            'Missing Batch',
+            'Special Order
         ],
         default='Other'
     )
 
-    # Keep flags in review tables so CS can understand why rows need review
-    df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status'])
-    df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key'])
+    # Keep flags in review tables so CS can understand why rows need review -- checklist with columns review reasons removed, since there is the 1 column with all Review_reason
+    df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status',
+                                                'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Order_Qty_Cases'], errors='ignore')
+    df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key', 
+                                                      'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Order_Qty_Cases'], errors='ignore')
 
     # rename status column
     df_parcel_final = df_parcel_final.rename(columns={'Status': 'Material Status'})
@@ -690,7 +696,7 @@ if uploaded_files:
             st.session_state.ltl_review_table['Approve'] = False
 
             # Put Approve first, PO second, Sales document third
-            priority_cols = ['Approve', 'Purchase order no.', 'Sales document']
+            priority_cols = ['Approve', 'Purchase order no.', 'Sales document','Order Quantity','Gross weight','Lines_PO','Review_Reason']
             cols = priority_cols + [col for col in st.session_state.ltl_review_table.columns if col not in priority_cols]
             st.session_state.ltl_review_table = st.session_state.ltl_review_table[cols]
 
@@ -698,7 +704,7 @@ if uploaded_files:
             st.session_state.parcel_review_table['Approve'] = False
 
             # Put Approve first, PO second, Sales document third
-            priority_cols = ['Approve', 'Purchase order no.', 'Sales document']
+            priority_cols = ['Approve', 'Purchase order no.', 'Sales document','Order Quantity','Gross weight','Lines_PO','Review_Reason']
             cols = priority_cols + [col for col in st.session_state.parcel_review_table.columns if col not in priority_cols]
             st.session_state.parcel_review_table = st.session_state.parcel_review_table[cols]
 

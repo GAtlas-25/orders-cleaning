@@ -364,7 +364,7 @@ def process_order_export(files, ltl_qty_df):
             'Change Batch to THD if available',
             'Missing PO',
             'Missing Batch',
-            'Special Order
+            'Special Order'
         ],
         default='Other'
     )

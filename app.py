@@ -358,7 +358,7 @@ def process_order_export(files, ltl_qty_df):
             ~df_parcel_errors['Storage_2509'],
             df_parcel_errors['Missing_PO'],
             df_parcel_errors['Missing_Batch'],
-            df_LTL_errors['Purchase order no.'].astype(str).str.contains('_', na=False)
+            df_parcel_errors['Purchase order no.'].astype(str).str.contains('_', na=False)
         ],
         [
             'Change Batch to THD if available',

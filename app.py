@@ -346,7 +346,7 @@ def process_order_export(files, ltl_qty_df):
             'D28 below MOQ',
             'Missing PO',
             'Missing Batch',
-            'Storage Location 2509'
+            'Cancel Order - Wrong Shipping method requested' #order came in as Storage Location 2509 (parcel) but should be a LTL
         ],
         default='Other'
     )

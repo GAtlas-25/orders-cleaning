@@ -284,49 +284,40 @@ def process_order_export(files, ltl_qty_df):
         (df_LTL_grouped['Material'].astype(str).str.startswith('5'))
     ].copy()
 
+    # Helpre condition for Parcel and Samples
+    is_sample = (
+        df_LTL_grouped['Status'] == 'Found - Sample'
+    )
+    
+    is_parcel = (
+        (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) &
+        (~df_LTL_grouped['Always_LTL'])
+    ) | is_sample
+
     # Parcel review
     df_parcel_errors = df_LTL_grouped[
         (
-            (
-                df_LTL_grouped['Missing_PO'] &
-                (
-                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample')) ## this is to identify samples 
-                )
-            )
+            (df_LTL_grouped['Missing_PO'] & is_parcel)
             |
-            (
-                df_LTL_grouped['Missing_Batch'] &
-                (
-                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
-                )
-            )
+            (df_LTL_grouped['Missing_Batch'] & is_parcel)
             |
             (
                 (~df_LTL_grouped['Storage_2509']) &
-                (
-                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) &
-                    (
-                        df_LTL_grouped['Status'] != 'Found - Sample'
-                    )
-                )
+                is_parcel &
+                (~is_sample)
             )
             |
             (
-                (df_LTL_grouped['Storage_2509'] & df_LTL_grouped['Orig']=='NJ') &
-                (
-                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
-                )
+                (df_LTL_grouped['Storage_2509']) &
+                (df_LTL_grouped['Orig'] == 'NJ') &
+                is_parcel
             )
             |
             (
-                (df_LTL_grouped['Purchase order no.'].astype(str).str.contains('_', na=False)) &
-                (
-                    (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
-                )
+                df_LTL_grouped['Purchase order no.']
+                .astype(str)
+                .str.contains('_', na=False) &
+                is_parcel
             )
         )
     ].copy()
@@ -351,17 +342,17 @@ def process_order_export(files, ltl_qty_df):
     # -------------------------------------------------------
     df_LTL_errors['Review_Reason'] = np.select(
         [
+            df_LTL_errors['Storage_2509'],
             df_LTL_errors['D28_Below_MOQ'],
             df_LTL_errors['Missing_PO'],
             df_LTL_errors['Missing_Batch'],
-            df_LTL_errors['Storage_2509'],
             df_LTL_errors['Purchase order no.'].astype(str).str.contains('_', na=False)
         ],
         [
+            'Cancel Order - Wrong Shipping method requested', #order came in as Storage Location 2509 (parcel) but should be a LTL
             'D28 below MOQ',
             'Missing PO',
             'Missing Batch',
-            'Cancel Order - Wrong Shipping method requested', #order came in as Storage Location 2509 (parcel) but should be a LTL
             'Special Order'
         ],
         default='Other'

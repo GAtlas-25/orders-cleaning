@@ -376,9 +376,9 @@ def process_order_export(files, ltl_qty_df):
 
     # Keep flags in review tables so CS can understand why rows need review -- checklist with columns review reasons removed, since there is the 1 column with all Review_reason
     df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status',
-                                                'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ'], errors='ignore')
+                                                'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Always_LTL'], errors='ignore')
     df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key', 
-                                                      'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ'], errors='ignore')
+                                                      'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Always_LTL'], errors='ignore')
 
     # rename status column
     df_parcel_final = df_parcel_final.rename(columns={'Status': 'Material Status'})

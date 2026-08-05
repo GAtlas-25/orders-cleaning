@@ -198,7 +198,8 @@ def process_order_export(files, ltl_qty_df):
                     'Missing_PO',
                     'Missing_Batch',
                     'Storage_2509',
-                    'D28_Below_MOQ'
+                    'D28_Below_MOQ',
+                    'Order_Qty_Cases'
                 ]
             }
         })

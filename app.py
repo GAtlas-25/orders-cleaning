@@ -169,6 +169,9 @@ def process_order_export(files, ltl_qty_df):
         df_LTL_clean['Order Quantity']
     )
 
+    # flag always ltl (24x48 and D28)
+    df_LTL_clean['Always_LTL'] = df_LTL_clean['LTL Qty'].isna()
+
     # Grouping logic
     df_LTL_grouped = (
         df_LTL_clean
@@ -184,6 +187,7 @@ def process_order_export(files, ltl_qty_df):
             'Storage_2509': 'max',
             'D28_Below_MOQ': 'max',
             'Order_Qty_Cases': 'sum',
+            'Always_LTL': 'max',
             **{
                 col: 'first'
                 for col in df_LTL_clean.columns
@@ -199,7 +203,8 @@ def process_order_export(files, ltl_qty_df):
                     'Missing_Batch',
                     'Storage_2509',
                     'D28_Below_MOQ',
-                    'Order_Qty_Cases'
+                    'Order_Qty_Cases',
+                    'Always_LTL'
                 ]
             }
         })
@@ -216,6 +221,14 @@ def process_order_export(files, ltl_qty_df):
 
     # LTL final candidates
     df_LTL_final = df_LTL_grouped[
+        (
+            (df_LTL_grouped['Always_LTL']) & 
+            (df_LTL_grouped['Status'] == 'Found')) |
+        (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']
+        )
+    ].copy()
+    
+    df_LTL_final = df_LTL_grouped[
         (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
         (
             (df_LTL_grouped['LTL Qty'].isna()) &
@@ -230,7 +243,7 @@ def process_order_export(files, ltl_qty_df):
                 df_LTL_grouped['Missing_PO'] &
                 (
                     (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                    (df_LTL_grouped['Always_LTL'] & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
             |
@@ -238,7 +251,7 @@ def process_order_export(files, ltl_qty_df):
                 df_LTL_grouped['Missing_Batch'] &
                 (
                     (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                    (df_LTL_grouped['Always_LTL'] & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
             |
@@ -246,7 +259,7 @@ def process_order_export(files, ltl_qty_df):
                 df_LTL_grouped['Storage_2509'] &
                 (
                     (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                    (df_LTL_grouped['Always_LTL'] & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
             | 
@@ -254,7 +267,7 @@ def process_order_export(files, ltl_qty_df):
                 (df_LTL_grouped['Purchase order no.'].astype(str).str.contains('_', na=False)) &
                 (
                     (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] != 'Found - Sample'))
+                    (df_LTL_grouped['Always_LTL'] & (df_LTL_grouped['Status'] != 'Found - Sample'))
                 )
             )
             | (df_LTL_grouped['D28_Below_MOQ'])
@@ -265,7 +278,7 @@ def process_order_export(files, ltl_qty_df):
     df_parcel_final = df_LTL_grouped[
         (
             (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) &
-            (df_LTL_grouped['LTL Qty'].isna() == False) &
+            (~df_LTL_grouped['Always_LTL']) &
             (df_LTL_grouped['D28_Below_MOQ'] == False) # Exclude
         ) |
         (df_LTL_grouped['Material'].astype(str).str.startswith('5'))
@@ -278,7 +291,7 @@ def process_order_export(files, ltl_qty_df):
                 df_LTL_grouped['Missing_PO'] &
                 (
                     (df_LTL_grouped['Order_Qty_Cases'] < df_LTL_grouped['LTL Qty']) |
-                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample'))
+                    (df_LTL_grouped['LTL Qty'].isna() & (df_LTL_grouped['Status'] == 'Found - Sample')) ## this is to identify samples 
                 )
             )
             |
@@ -372,9 +385,9 @@ def process_order_export(files, ltl_qty_df):
 
     # Keep flags in review tables so CS can understand why rows need review -- checklist with columns review reasons removed, since there is the 1 column with all Review_reason
     df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status',
-                                                'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Order_Qty_Cases'], errors='ignore')
+                                                'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ'], errors='ignore')
     df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key', 
-                                                      'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Order_Qty_Cases'], errors='ignore')
+                                                      'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ'], errors='ignore')
 
     # rename status column
     df_parcel_final = df_parcel_final.rename(columns={'Status': 'Material Status'})
@@ -407,13 +420,17 @@ def process_order_export(files, ltl_qty_df):
         )
     )
 
+    # Order Quantity that we want for LTL is the 'Order_Qty_Cases' - (in the BOL the carrier cares about cases)
+    df_LTL_errors['Order Quantity'] = df_LTL_errors['Order_Qty_Cases']
+    df_parcel_errors['Order Quantity'] = df_parcel_errors['Order_Qty_Cases']
+
     # Remove helper columns used only for pallet calculation
     df_LTL_final = df_LTL_final.drop(
-        columns=['Tile_Case', 'Sales unit'],
+        columns=['Tile_Case', 'Sales unit','Order_Qty_Cases'],
         errors='ignore'
     )
     df_LTL_errors = df_LTL_errors.drop(
-        columns=['Tile_Case', 'Sales unit'],
+        columns=['Tile_Case', 'Sales unit','Order_Qty_Cases'],
         errors='ignore'
     )
 

@@ -590,10 +590,17 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
         'ShipToPostalCode':'Zip Code',
         'ShipToDayPhone':'Phone Number'})
 
+    # Columns to add for final output
+    parcel_df_export['Party responsible for freight'] = 'Customer'
+    parcel_df_export['Shipment type'] = 'UPS Ground'
+    parcel_df_export['Trademark'] = 'CORSO ITALIA'
+    parcel_df_export['Account Name'] = 'HOME DEPOT USA,INC'
+    parcel_df_export['Country'] = 'USA' ## eventually to fill based on state to recognize shipments abroad
+
     # Reorder Columns Appearance
     parcel_df_export = parcel_df_export[['Purchase order no.','Material Status','Orig','Order Quantity','Gross weight','Lines_PO','Sales document','Delivery',
-                                         'SAP_Carrier_Code','UPS_account','Business Name', 'First Name','Last Name','Phone Number','Address','Deliver To Address 2',
-                                         'Zip Code','State','City']]
+                                         'Party responsible for freight','SAP_Carrier_Code','UPS_account','Shipment type','Trademark','Account Name','Business Name', 
+                                         'First Name','Last Name','Phone Number','Address','Deliver To Address 2','Zip Code','State','Country','City']]
 
     return parcel_df_export
 

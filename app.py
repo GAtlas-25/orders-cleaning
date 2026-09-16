@@ -37,6 +37,9 @@ def to_excel_bytes(df, sheet_name="Sheet1"):
         df.to_excel(writer, index=False, sheet_name=sheet_name)
     return buffer.getvalue()
 
+def to_csv_bytes(df):
+    return df.to_csv(index=False).encode('utf-8')
+
 def get_approved_rows(df_with_checks):
     if df_with_checks is None or df_with_checks.empty or 'Approve' not in df_with_checks.columns:
         return pd.DataFrame()
@@ -479,8 +482,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     df_filtered['Sales document'] = df_filtered['Sales document'].astype(str).str.strip()
 
     df_parcel_final = df_parcel_final.copy()
-    df_parcel_final['Sales document'] = df_parcel_final['Sales document'].astype(str).str.strip()
-
+    df_parcel_final['Sales document'] = df_parcel_final['Sales document'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     merged_parcel_df = pd.merge(
         df_parcel_final,
         df_filtered[['Sales document', 'Delivery', 'Name ship-to party', 'Country Key', 'Region', 'Description']],
@@ -951,8 +953,8 @@ if st.session_state.parcel_df_export is not None:
 
     st.download_button(
         "⬇️ Download Final Parcel Export",
-        data=to_excel_bytes(st.session_state.parcel_df_export, "Parcel_Final_Output"),
-        file_name="Parcel_Final_Export.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        data=to_csv_bytes(st.session_state.parcel_df_export),
+        file_name="Parcel_Final_Export.csv",
+        mime="text/csv",
         use_container_width=True
     )

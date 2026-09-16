@@ -505,6 +505,9 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     )
     df_chub.columns = df_chub.columns.str.strip().str.replace(r"\s+", "", regex=True)
 
+    # Convert PONumber to string and pad with leading zeros to 8 digits
+    df_chub['PONumber'] = df_chub['PONumber'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.zfill(8)
+    
     df_chub['ShipToPostalCode'] = (
         df_chub['ShipToPostalCode']
         .astype(str)
@@ -547,10 +550,10 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     ]
     df_chub_filtered = df_chub[col_to_keep].copy()
 
+    merged_parcel_df['Purchase order no.'] = merged_parcel_df['Purchase order no.'].astype(str).str.strip().str.replace(r'\.0$', '', regex=True).str.zfill(8)
+
     for col in df_chub_filtered.columns:
         df_chub_filtered[col] = df_chub_filtered[col].astype(str).str.strip()
-
-    merged_parcel_df['Purchase order no.'] = merged_parcel_df['Purchase order no.'].astype(str).str.strip()
 
     parcel_df_export = pd.merge(
         merged_parcel_df,

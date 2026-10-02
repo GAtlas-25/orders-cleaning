@@ -163,7 +163,7 @@ def process_order_export(files, ltl_qty_df):
     df_LTL_clean['Storage_2509'] = df_LTL_clean['Storage Location'] == 2509
 
     # flag Total = 0 -- means price is wrong and needs to be checked
-    df_LTL_clean['Total_Zero'] = (df_LTL_clean['Gross weight'] == 0)
+    df_LTL_clean['Total_Zero'] = (df_LTL_clean['Total'] == 0)
 
     # some orders come in in eaches (ST). That changes how the condition LTL vs Parcel is calculated. Create helper to normalize
     df_LTL_clean['Order_Qty_Cases'] = np.where(

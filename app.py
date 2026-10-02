@@ -162,6 +162,9 @@ def process_order_export(files, ltl_qty_df):
 
     df_LTL_clean['Storage_2509'] = df_LTL_clean['Storage Location'] == 2509
 
+    # flag Total = 0 -- means price is wrong and needs to be checked
+    df_LTL_clean['Total_Zero'] = (df_LTL_clean['Gross weight'] == 0)
+
     # some orders come in in eaches (ST). That changes how the condition LTL vs Parcel is calculated. Create helper to normalize
     df_LTL_clean['Order_Qty_Cases'] = np.where(
         (df_LTL_clean['Sales unit'] == 'ST') &
@@ -188,6 +191,7 @@ def process_order_export(files, ltl_qty_df):
             'Missing_PO': 'max',
             'Missing_Batch': 'max',
             'Storage_2509': 'max',
+            'Total_Zero': 'max',
             'D28_Below_MOQ': 'max',
             'Order_Qty_Cases': 'sum',
             'Always_LTL': 'max',
@@ -274,6 +278,7 @@ def process_order_export(files, ltl_qty_df):
                 )
             )
             | (df_LTL_grouped['D28_Below_MOQ'])
+            | (df_LTL_grouped['Total_Zero'])
         )
     ].copy()
 
@@ -322,6 +327,7 @@ def process_order_export(files, ltl_qty_df):
                 .str.contains('_', na=False) &
                 is_parcel
             )
+            | (df_LTL_grouped['Total_Zero'] & is_parcel)
         )
     ].copy()
 
@@ -346,6 +352,7 @@ def process_order_export(files, ltl_qty_df):
     df_LTL_errors['Review_Reason'] = np.select(
         [
             df_LTL_errors['Storage_2509'],
+            df_LTL_errors['Total_Zero'],
             df_LTL_errors['D28_Below_MOQ'],
             df_LTL_errors['Missing_PO'],
             df_LTL_errors['Missing_Batch'],
@@ -353,6 +360,7 @@ def process_order_export(files, ltl_qty_df):
         ],
         [
             'Cancel Order - Wrong Shipping method requested', #order came in as Storage Location 2509 (parcel) but should be a LTL
+            'Check item price',
             'D28 below MOQ',
             'Missing PO',
             'Missing Batch',
@@ -364,12 +372,14 @@ def process_order_export(files, ltl_qty_df):
     df_parcel_errors['Review_Reason'] = np.select(
         [
             ~df_parcel_errors['Storage_2509'],
+            df_parcel_errors['Total_Zero'],
             df_parcel_errors['Missing_PO'],
             df_parcel_errors['Missing_Batch'],
             df_parcel_errors['Purchase order no.'].astype(str).str.contains('_', na=False)
         ],
         [
             'Change Batch to THD if available',
+            'Check item price',
             'Missing PO',
             'Missing Batch',
             'Special Order'
@@ -379,9 +389,9 @@ def process_order_export(files, ltl_qty_df):
 
     # Keep flags in review tables so CS can understand why rows need review -- checklist with columns review reasons removed, since there is the 1 column with all Review_reason
     df_LTL_errors = df_LTL_errors.drop(columns=['LTL Qty', 'Batch', 'row_key','Status',
-                                                'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Always_LTL'], errors='ignore')
+                                                'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Always_LTL','Total_Zero'], errors='ignore')
     df_parcel_errors = df_parcel_errors.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'row_key', 
-                                                      'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Always_LTL'], errors='ignore')
+                                                      'Missing_PO','Missing_Batch','Storage_2509','D28_Below_MOQ','Always_LTL','Total_Zero'], errors='ignore')
 
     # rename status column
     df_parcel_final = df_parcel_final.rename(columns={'Status': 'Material Status'})

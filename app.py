@@ -496,7 +496,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     df_parcel_final['Sales document'] = df_parcel_final['Sales document'].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     merged_parcel_df = pd.merge(
         df_parcel_final,
-        df_filtered[['Sales document', 'Delivery', 'Name ship-to party', 'Country Key', 'Region', 'Description']],
+        df_filtered[['Sales document', 'Delivery', 'Name sold-to party', 'Name ship-to party', 'Country Key', 'Region', 'Description']],
         on='Sales document',
         how='left'
     )
@@ -610,7 +610,7 @@ def process_parcel_export(df_parcel_final, dn_file, chub_file):
     parcel_df_export['Party responsible for freight'] = 'Customer'
     parcel_df_export['Shipment type'] = 'UPS Ground'
     parcel_df_export['Trademark'] = 'CORSO ITALIA'
-    parcel_df_export['Account Name'] = 'HOME DEPOT USA,INC'
+    parcel_df_export['Account Name'] = parcel_df_export['Name sold-to party'].astype(str).str.strip()
     parcel_df_export['Country'] = 'USA' ## eventually to fill based on state to recognize shipments abroad
 
     # Reorder Columns Appearance

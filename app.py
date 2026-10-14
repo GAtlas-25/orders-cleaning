@@ -235,14 +235,6 @@ def process_order_export(files, ltl_qty_df):
         (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']
         )
     ].copy()
-    
-    df_LTL_final = df_LTL_grouped[
-        (df_LTL_grouped['Order_Qty_Cases'] >= df_LTL_grouped['LTL Qty']) |
-        (
-            (df_LTL_grouped['LTL Qty'].isna()) &
-            (df_LTL_grouped['Status'] == 'Found')
-        )
-    ].copy()
 
     # LTL review
     df_LTL_errors = df_LTL_grouped[
@@ -295,7 +287,7 @@ def process_order_export(files, ltl_qty_df):
 
     # Helpre condition for Parcel and Samples
     is_sample = (
-        df_LTL_grouped['Status'] == 'Found - Sample'
+        (df_LTL_grouped['Status'] == 'Found - Sample') | (df_LTL_grouped['Material'].astype(str).str.startswith('5'))
     )
     
     is_parcel = (
@@ -345,7 +337,7 @@ def process_order_export(files, ltl_qty_df):
 
     # Final cleaning for output
     df_LTL_final = df_LTL_final.drop(columns=['LTL Qty', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'row_key'])
-    df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'row_key'])
+    df_parcel_final = df_parcel_final.drop(columns=['LTL Qty', 'Case_Pallet', 'Batch', 'Missing_PO', 'Missing_Batch', 'Storage_2509', 'Always_LTL', 'row_key'])
 
     # -------------------------------------------------------
     # Add human-readable review reason

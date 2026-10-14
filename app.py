@@ -177,7 +177,7 @@ def process_order_export(files, ltl_qty_df):
     )
 
     # flag always ltl (24x48 and D28)
-    df_LTL_clean['Always_LTL'] = df_LTL_clean['LTL Qty'].isna()
+    df_LTL_clean['Always_LTL'] = (df_LTL_clean['LTL Qty'].isna() & ~df_LTL_clean['Material'].astype(str).str.startswith('5')) #exclude samples
 
     # Grouping logic
     df_LTL_grouped = (
